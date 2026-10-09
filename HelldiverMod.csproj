@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <AssemblyName>HelldiverMod</AssemblyName>
+    <RootNamespace>HelldiverMod</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Configurations>Debug;Release;Lab</Configurations>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <DebugType>none</DebugType>
+    <NoWarn>CS0649;CS0169;CS1591;CS8632;CS0108;CS0114</NoWarn>
+    <Lab>$(MSBuildThisFileDirectory)..\lab\</Lab>
+    <Managed>$(Lab)Risk of Rain 2_Data\Managed\</Managed>
+    <Plug>$(Lab)BepInEx\plugins\</Plug>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(Lab)BepInEx\core\BepInEx.dll" Private="false" />
+    <Reference Include="$(Lab)BepInEx\core\0Harmony.dll" Private="false" />
+    <Reference Include="$(Managed)RoR2.dll" Private="false" />
+    <Reference Include="$(Managed)Assembly-CSharp.dll" Private="false" />
+    <Reference Include="$(Managed)HGCSharpUtils.dll" Private="false" />
+    <Reference Include="$(Managed)HGUnityUtils.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.Addressables.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.ResourceManager.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.Postprocessing.Runtime.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.Mathematics.dll" Private="false" />
+    <Reference Include="$(Managed)Unity.Collections.dll" Private="false" />
+    <Reference Include="$(Managed)KinematicCharacterController.dll" Private="false" />
+    <Reference Include="$(Managed)Rewired_Core.dll" Private="false" />
+    <Reference Include="$(Managed)com.unity.multiplayer-hlapi.Runtime.dll" Private="false" />
+    <Reference Include="$(Managed)AK.Wwise.Unity.API.dll" Private="false" />
+    <Reference Include="$(Managed)AK.Wwise.Unity.API.WwiseTypes.dll" Private="false" />
+    <Reference Include="$(Managed)UnityEngine*.dll" Exclude="$(Managed)UnityEngine.JSONSerializeModule.dll" Private="false" />
+    <Reference Include="$(Plug)RiskofThunder-RoR2BepInExPack\RoR2BepInExPack.dll" Private="false" />
+    <Reference Include="$(Plug)R2API.ContentManagement\R2API.ContentManagement.dll" Private="false" />
+    <Reference Include="$(Plug)R2API.Language\R2API.Language.dll" Private="false" />
+    <Reference Include="$(Plug)R2API.Core\R2API.Core.dll" Private="false" />
+    <Reference Include="$(Plug)R2API.Prefab\R2API.Prefab.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/*.png" LogicalName="HelldiverMod.Assets.%(Filename)%(Extension)" />
+    <!-- source art for tools/hd2/capetex.py (HD2 logo): baked into Model/cape_tex.png (private build only), never embedded in the share-safe DLL -->
+    <EmbeddedResource Remove="Assets/Helldivers_2_Logo_white.png" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Lab'">
+    <DefineConstants>$(DefineConstants);LAB</DefineConstants>
+  </PropertyGroup>
+  <!-- lab tools only (Dev/): hooks for the test bridge and the benchmark -->
+  <ItemGroup Condition="'$(Configuration)'=='Lab'">
+    <Reference Include="$(Plug)MMHOOK/MMHOOK_RoR2.dll" Private="false" />
+    <Reference Include="$(Lab)BepInEx\core\MonoMod.RuntimeDetour.dll" Private="false" />
+    <Reference Include="$(Lab)BepInEx\core\MonoMod.Utils.dll" Private="false" />
+  </ItemGroup>
+  <!-- Dev/ is the lab test bridge and benchmark: Lab configuration only -->
+  <ItemGroup Condition="'$(Configuration)'!='Lab'">
+    <Compile Remove="Dev/**" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('Model')">
+    <None Include="Model/*" CopyToOutputDirectory="PreserveNewest" Link="Model/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+# build output
+bin/
+obj/
+out/
+outrel/
+.vs/
+*.user
+__pycache__/
+
+# Helldivers 2 data: converted from the player's own install, never in the repo
+Model/
+Assets_hd2/
+Assets/CustomIcons/
+Assets/Helldivers_2_Logo_white.png
+
+# dumped from Risk of Rain 2 with the lab bridge (dumpskel)
+tools/hd2/commando_skel.json
