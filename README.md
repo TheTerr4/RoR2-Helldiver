@@ -4,6 +4,7 @@ A Helldivers 2 survivor for Risk of Rain 2: the AR-23 Liberator or SG-225 Breake
 jump pack, and stratagems called in by typing their arrow-key codes. Works in multiplayer, and every number can be changed in
 the config.
 
+- **Download:** [Terr4-Helldiver on Thunderstore](https://thunderstore.io/c/riskofrain2/p/Terr4/Helldiver/).
 - **Install:** through r2modman or Thunderstore Mod Manager, or by hand (see [`package/README.md`](package/README.md)).
 - **Changes:** [`package/CHANGELOG.md`](package/CHANGELOG.md).
 - **Bugs and ideas:** open an issue.
