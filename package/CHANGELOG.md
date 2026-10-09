@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.3
+- The mod's website link now goes to its GitHub repo (https://github.com/TheTerr4/RoR2-Helldiver). No gameplay changes.
+
 ## 1.0.2
 - **Lobby**: changing your equipment no longer changes every other Helldiver in the lobby; each one shows its own player's weapon and utility.
 - **Capes** no longer float where a player was last seen when that player is off screen.

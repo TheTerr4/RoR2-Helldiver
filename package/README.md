@@ -50,18 +50,11 @@ In co-op every player should use the same values.
 
 ## Installing
 
-With r2modman: **Settings** → **Import local mod** → pick the zip. Manually: extract the zip into `BepInEx/plugins/Helldiver/`.
-Requires BepInExPack and R2API (ContentManagement, Language, Prefab); r2modman installs them from the manifest.
+Requires BepInExPack and R2API (ContentManagement, Language, Prefab).
 
-## Two packages
+## Models
 
-- **Full** (`Terr4-Helldiver-<version>.zip`): includes the `Model` folder: the Helldiver body, both weapons, the Jump Pack and a simulated cape.
-  These models were converted from a Helldivers 2 install for personal use; they are not original art. Delete the `Model` folder to fall back to the
-  recoloured Commando.
-- **Share-safe** (`Terr4-Helldiver-<version>-no-hd2-model.zip`): the same survivor, skills and config with no Helldivers 2 data: the Helldiver is a
-  recoloured Commando.
-
-The models are built for low-end PCs too: about 18,000 triangles for the Helldiver and everything it carries, block-compressed textures (about 13 MB of video memory),
+The models are built for low-end PCs: about 18,000 triangles for the Helldiver and everything it carries, block-compressed textures (about 13 MB of video memory),
 loaded once while the game starts.
 
 ## Credits
