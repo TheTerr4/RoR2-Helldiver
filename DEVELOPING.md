@@ -26,7 +26,7 @@ its text in `Tokens.cs`, an icon in `Assets/`, and its effect in `StratagemBeaco
 ```
 dotnet build -c Release -o outrel                                   # the shipped DLL
 dotnet build -c Lab -o out                                          # + Dev/ (test bridge, benchmark), with the Model folder
-uv run --with pillow python tools/package.py                        # builds Release and writes both zips to ../dist
+uv run --with pillow python tools/package.py                        # builds Release and writes Helldiver-<v>.zip (Thunderstore) and -standalone.zip to ../dist
 ```
 
 References come straight from a copy of the game with BepInEx and R2API installed, `../lab` by default; point elsewhere with
