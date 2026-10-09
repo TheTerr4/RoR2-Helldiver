@@ -20,7 +20,7 @@ VER = re.search(r'Version = "([0-9.]+)"', open(os.path.join(MOD, "Plugin.cs"), e
 MANIFEST = {
     "name": "Helldiver",
     "version_number": VER,
-    "website_url": "https://github.com/rehan-remade/universal-modder",
+    "website_url": "https://github.com/TheTerr4/RoR2-Helldiver",
     "description": "Helldivers 2 survivor: rifle or shotgun, grenades, dive or jump pack, and stratagems you call in with arrow-key codes. Fully configurable.",
     "dependencies": ["bbepis-BepInExPack-5.4.2122", "RiskofThunder-R2API_ContentManagement-1.0.11", "RiskofThunder-R2API_Language-1.1.0", "RiskofThunder-R2API_Prefab-1.1.1"],
 }

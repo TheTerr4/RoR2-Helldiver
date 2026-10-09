@@ -30,3 +30,7 @@ dotnet build -c Release -o outrel -p:Lab="D:\path\to\Risk of Rain 2\\"
 - Made with [universal-modder](https://github.com/rehan-remade/universal-modder), a game-modding toolkit for AI coding agents.
 - Helldivers 2 and its art belong to Arrowhead Game Studios and Sony Interactive Entertainment. This is a fan mod, not
   affiliated with or endorsed by them.
+
+## License
+
+The code is under the [MIT License](LICENSE). Helldivers 2 names and art are not covered by it.
