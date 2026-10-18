@@ -73,7 +73,15 @@ namespace HelldiverMod
             var simple = p.GetComponent<ProjectileSimple>();
             simple.desiredForwardSpeed = BeaconSpeed;
             simple.lifetime = 30f;
+            // Since the 1.5 update (Hallowed Concepts) this vanilla prefab has no ProjectileStickOnImpact any more: add one (a component added at runtime
+            // starts with null strings and arrays, which the sticking code reads)
             var stick = p.GetComponent<ProjectileStickOnImpact>();
+            if (!stick)
+            {
+                stick = p.AddComponent<ProjectileStickOnImpact>();
+                stick.stickSoundString = "";
+                stick.stickParticleSystem = Array.Empty<ParticleSystem>();
+            }
             stick.ignoreWorld = false;
             stick.ignoreCharacters = false;
             p.AddComponent<StratagemBeacon>().kind = kind;

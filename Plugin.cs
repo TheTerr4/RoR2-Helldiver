@@ -9,7 +9,7 @@ namespace HelldiverMod
     [BepInPlugin(Guid, "Helldiver", Version)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "terr4.helldiver", Version = "1.0.3";
+        public const string Guid = "terr4.helldiver", Version = "1.0.4";
         public static ManualLogSource Log;
         public static string Dir;
 

@@ -396,7 +396,7 @@ namespace HelldiverMod
                     var pp = ProjectileCatalog.GetProjectilePrefab(ProjectileCatalog.FindProjectileIndex(arg));
                     var ie = pp ? pp.GetComponent<RoR2.Projectile.ProjectileImpactExplosion>() : null;
                     if (!ie) { Say("projinfo: no " + arg); break; }
-                    Say("projinfo " + arg + " lifetime=" + ie.lifetime + " timerAfterImpact=" + ie.timerAfterImpact + " lifetimeAfterImpact=" + ie.lifetimeAfterImpact + " destroyOnEnemy=" + ie.destroyOnEnemy + " destroyOnWorld=" + ie.destroyOnWorld + " explodeOnLifeTimeExpiration=" + ie.explodeOnLifeTimeExpiration + " radius=" + ie.blastRadius);
+                    Say("projinfo " + arg + " lifetime=" + ie.lifetime + " timerAfterImpact=" + ie.timerAfterImpact + " lifetimeAfterImpact=" + ie.lifetimeAfterImpact + " destroyOnEnemy=" + ie.destroyOnEnemy + " destroyOnWorld=" + ie.destroyOnWorld + " radius=" + ie.blastRadius);
                     break;
                 }
                 case "killall":     // remove every monster (no death effects), e.g. between showcase shots

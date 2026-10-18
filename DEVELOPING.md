@@ -1,6 +1,6 @@
 # Developing the Helldiver mod
 
-Risk of Rain 2 1.4.1 (Unity 2021.3, Mono), BepInEx 5 + R2API. The survivor is a clone of the Commando body with its own skills, states and visuals.
+Risk of Rain 2 1.5.0 (Hallowed Concepts; Unity 2021.3, Mono), BepInEx 5 + R2API. The survivor is a clone of the Commando body with its own skills, states and visuals.
 Player-facing docs: `package/README.md` and `package/CHANGELOG.md`. The journal of how everything was found out: `../MODLOG.md`.
 
 ## Layout

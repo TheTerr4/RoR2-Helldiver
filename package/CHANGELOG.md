@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+- **Works with the Hallowed Concepts update** (game version 1.5.0). Since that update the mod failed to load (`VTable setup of type HelldiverMod.States.ArmedBase failed`):
+  the game moved the code that aims thrown projectiles, and the vanilla sticky grenade the stratagem beacon is based on lost its sticky part.
+  Built for the updated game; use 1.0.3 on the old 1.4.1 build.
+- Needs R2API ContentManagement 1.1.0 or newer.
+
 ## 1.0.3
 - The mod's website link now goes to its GitHub repo (https://github.com/TheTerr4/RoR2-Helldiver). No gameplay changes.
 
