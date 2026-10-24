@@ -18,7 +18,7 @@ from mathutils import Vector
 RIG = "HelldiverRig"
 COLLECTION = "Helldiver"
 SKIN_SCALE = 1.0
-SOLE_TOP = 0.03           # height of the boot soles' top face
+BODY_CUT_Z = 0.14         # the body ends here, inside the boot shafts
 NO_DEFORM = {"base"}       # behind the hips; Commando's mesh doesn't use it either
 RIGGING_SKILL = r"C:\Users\Terr4\.claude\skills\blender-character-rigging\scripts"
 
@@ -36,9 +36,9 @@ def skeleton():
     def chain(*ns):
         for a, b in zip(ns, ns[1:]): E.append((a, b))
     # torso: wide ribcage and shoulders, narrow waist (concept), neck ends inside the helmet
-    node("pelvis", (0, 0.005, 0.95), (0.205, 0.155))
-    node("waist", (0, 0.005, 1.07), (0.185, 0.14))
-    node("belly", (0, 0.01, 1.19), (0.205, 0.15))
+    node("pelvis", (0, 0.005, 0.95), (0.218, 0.16))
+    node("waist", (0, 0.005, 1.07), (0.215, 0.158))
+    node("belly", (0, 0.01, 1.19), (0.225, 0.162))
     node("chest", (0, 0.03, 1.33), (0.24, 0.17))
     node("upchest", (0, 0.05, 1.46), (0.24, 0.165))
     node("neck0", (0, 0.07, 1.56), (0.095, 0.09))
@@ -213,33 +213,133 @@ def _cheek(sx):
     return [hp(sx * 15, 1.596, 1.135), hp(sx * 58, 1.626, 1.035), hp(sx * 56, 1.694, 1.05), hp(sx * 18.5, 1.696, 1.098)]
 
 
+# goggle opening (Terr4: "snowboard goggles", slightly lower than the surrounding shell): bottom edge with a nose notch in the
+# middle and ends curving up, top edge drooping at the ends; columns every 10 degrees, the opening spans -60..60
+GOG_HALF = 60.0
+def gog_bottom(az):
+    t = abs(az) / GOG_HALF
+    return 1.684 + 0.017 * math.exp(-(az / 10.0) ** 2) + 0.02 * t ** 3
+def gog_top(az):
+    t = abs(az) / GOG_HALF
+    return 1.738 - 0.012 * t ** 3
+
+
+def _shell_scale(az, z):
+    """How far the helmet shell sits from the dome (1 = dome). The face pushes forward below the goggles (one smooth surface,
+    no plates), a brow bulges just above them, and the whole lower part flares outward."""
+    a = abs(((az + 180) % 360) - 180)
+    front = max(0.0, math.cos(math.radians(min(a, 80.0) * 90.0 / 80.0))) ** 1.4
+    face = 0.15 * front * max(0.0, min(1.0, (1.70 - z) / 0.055))
+    chin = 0.03 * front * max(0.0, min(1.0, (1.605 - z) / 0.025))
+    brow = 0.055 * front * max(0.0, 1.0 - abs(z - 1.748) / 0.016)
+    # a distinct shelf: steps out quickly below 1.636, then keeps flaring gently to the bottom edge
+    flare = 0.075 * max(0.0, min(1.0, (1.637 - z) / 0.012)) + 0.03 * max(0.0, min(1.0, (1.622 - z) / 0.045))
+    return 1.0 + face - chin + brow + flare
+
+
+SHELL_COLS = 36
+SHELL_ROWS_Z = [1.574, 1.590, 1.606, 1.622, 1.638, 1.654, 1.670, None, None, 1.756, 1.772]   # None = goggle bottom / top rows
+
+
+def _shell_rows():
+    rows = []
+    for z in SHELL_ROWS_Z: rows.append(z)
+    top_el = el_at(1.79)
+    for k in range(6): rows.append(("el", top_el + (88.0 - top_el) * k / 5))
+    return rows
+
+
+def _shell_point(az, row, s_extra=0.0):
+    if row is None: raise ValueError
+    if isinstance(row, tuple):
+        el = row[1]; p = helmet_point(az, el, 1.0)
+        return HELMET_C + (p - HELMET_C) * (_shell_scale(az, p.z) + s_extra)
+    z = row
+    return HELMET_C + (helmet_point(az, el_at(z), 1.0) - HELMET_C) * (_shell_scale(az, z) + s_extra)
+
+
+def helmet_shell(bm, part="shell"):
+    """part "shell": the helmet in one piece (dome, face, brow, lower flare) with the goggle opening cut out and its inner walls
+    stepping 15 mm in; part "glass": the recessed goggle glass filling the opening."""
+    uvl = bm.loops.layers.uv.verify()
+    azs = [-180.0 + 360.0 * i / SHELL_COLS for i in range(SHELL_COLS)]
+    rows = _shell_rows()
+    ib, it = SHELL_ROWS_Z.index(None), SHELL_ROWS_Z.index(None) + 1
+    def row_z(j, az):
+        if j == ib: return gog_bottom(max(-GOG_HALF, min(GOG_HALF, az)))
+        if j == it: return gog_top(max(-GOG_HALF, min(GOG_HALF, az)))
+        return rows[j]
+    def inside(az): return -GOG_HALF - 1e-6 <= az <= GOG_HALF + 1e-6
+    if part == "glass":
+        cols = [a for a in azs if inside(a)]
+        G = {}
+        for i, az in enumerate(cols):
+            for j in (ib, it):
+                G[i, j] = bm.verts.new(_shell_point(az, row_z(j, az), -0.015 / 0.13))
+        F = [bm.faces.new([G[i, ib], G[i + 1, ib], G[i + 1, it], G[i, it]]) for i in range(len(cols) - 1)]
+        for f in F: _uv_face(f, uvl, "visor")
+        bmesh.ops.recalc_face_normals(bm, faces=F)
+        for f in F:
+            if f.normal.dot(f.calc_center_median() - HELMET_C) < 0: f.normal_flip()
+        return list(bm.verts)
+    G = {}
+    for j in range(len(rows)):
+        for i, az in enumerate(azs):
+            G[i, j] = bm.verts.new(_shell_point(az, row_z(j, az)))
+    top = bm.verts.new(helmet_point(0, 90, 1.0))
+    F = []
+    for j in range(len(rows) - 1):
+        for i in range(SHELL_COLS):
+            k = (i + 1) % SHELL_COLS
+            a0, a1 = azs[i], azs[k] if k else 180.0
+            if j == ib and inside(a0) and inside(a1 if k else 180.0) and a1 > a0: continue      # the goggle opening
+            F.append(bm.faces.new([G[i, j], G[k, j], G[k, j + 1], G[i, j + 1]]))
+    for i in range(SHELL_COLS):
+        F.append(bm.faces.new([G[i, len(rows) - 1], G[(i + 1) % SHELL_COLS, len(rows) - 1], top]))
+    # goggle walls: from the opening's edge 15 mm inward to the glass
+    gcols = [i for i, a in enumerate(azs) if inside(a)]
+    inner = {}
+    for i in gcols:
+        for j in (ib, it):
+            inner[i, j] = bm.verts.new(_shell_point(azs[i], row_z(j, azs[i]), -0.015 / 0.13))
+    for i, i2 in zip(gcols, gcols[1:]):
+        F.append(bm.faces.new([G[i, ib], inner[i, ib], inner[i2, ib], G[i2, ib]]))
+        F.append(bm.faces.new([G[i2, it], inner[i2, it], inner[i, it], G[i, it]]))
+    for i in (gcols[0], gcols[-1]):
+        F.append(bm.faces.new([G[i, ib], G[i, it], inner[i, it], inner[i, ib]]))
+    # a thin inner wall at the open bottom (the neck)
+    rim = [G[i, 0] for i in range(SHELL_COLS)]
+    rim_in = [bm.verts.new(HELMET_C + (v.co - HELMET_C) * 0.88 + Vector((0, 0, 0.01))) for v in rim]
+    for i in range(SHELL_COLS):
+        k = (i + 1) % SHELL_COLS
+        F.append(bm.faces.new([rim[k], rim[i], rim_in[i], rim_in[k]]))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    for f in F: _uv_face(f, uvl, "armor")
+    return list(bm.verts)
+
+
+def _vent(bm, sx, z, az0, az1):
+    """A dark slot sunk into the lower flare at the front of the face (where the flare ends)."""
+    e = 0.035                                   # ~4 mm proud of the shell
+    c = [_shell_point(sx * az0, z - 0.005, e), _shell_point(sx * az1, z - 0.002, e),
+         _shell_point(sx * az1, z + 0.006, e), _shell_point(sx * az0, z + 0.003, e)]
+    return quad_slab(bm, c if sx > 0 else list(reversed(c)), 0.012, "dark")
+
+
 def helmet_parts():
-    """(name, colour, builder(bm), subdiv). All weighted 100% to the head bone. subdiv 0 parts are faceted on purpose.
-    Shape (concept turnaround + helmet sheet): a smooth dome with a raised centre strip bordered by two yellow lines, a thin brow
-    lip, a recessed amber visor, an angular mask (centre plate jutting forward and down, cheek plates angled back) with two vent
-    slots low on each cheek, and a rounded ear panel on each side."""
+    """(name, colour, builder(bm), subdiv). All weighted 100% to the head bone.
+    Concept (helmet sheet + Terr4's notes): one smooth shell whose face pushes forward below the goggles, a lower flare all the way
+    round that ends at the front in the vents, recessed snowboard-goggle visor, raised centre strip with two yellow lines."""
     P = []
-    P.append(("Helmet", "armor", lambda bm: helmet_dome(bm), 1))
-    # raised centre strip from the brow over the top and down the back, yellow lines along both sides
-    P.append(("HelmetRidge", "armor", lambda bm: (surface_patch(bm, -8, 8, 1.752, 1.846, 0.99, 1.025, segs=2, rows=5),
-                                                  surface_patch(bm, 172, 188, 1.64, 1.846, 0.99, 1.025, segs=2, rows=6)), 0))
+    P.append(("Helmet", "armor", lambda bm: helmet_shell(bm, "shell"), 0))
+    P.append(("Visor", "visor", lambda bm: helmet_shell(bm, "glass"), 0))
+    P.append(("HelmetRidge", "armor", lambda bm: (surface_patch(bm, -8, 8, 1.776, 1.842, 0.96, 1.025, segs=2, rows=4),
+                                                  surface_patch(bm, 172, 188, 1.66, 1.842, 0.96, 1.025, segs=2, rows=6)), 0))
     for side, sx in (("l", 1), ("r", -1)):
-        P.append(("HelmetLine." + side, "trim", lambda bm, sx=sx: (surface_patch(bm, sx * 8.5, sx * 11, 1.749, 1.846, 0.99, 1.02, segs=1, rows=5),
-                                                                   surface_patch(bm, 180 - sx * 8.5, 180 - sx * 11, 1.64, 1.846, 0.99, 1.02, segs=1, rows=6)), 0))
-    P.append(("Brow", "armor", lambda bm: surface_patch(bm, -68, 68, 1.732, 1.752, 0.98, 1.10, segs=8, rows=1), 0))
-    P.append(("Visor", "visor", lambda bm: surface_patch(bm, -58, 58, 1.694, 1.734, 0.95, 1.03, segs=8, rows=1), 0))
-    # mask: centre plate rising into the visor's lower edge (the notch), jutting forward and down to a flat chin
-    P.append(("MaskCentre", "armor", lambda bm: quad_slab(bm, [hp(-16, 1.588, 1.15), hp(16, 1.588, 1.15), hp(19, 1.702, 1.105), hp(-19, 1.702, 1.105)], 0.03, "armor"), 0))
-    for side, sx in (("l", 1), ("r", -1)):
-        P.append(("Cheek." + side, "armor", lambda bm, sx=sx: quad_slab(bm, _cheek(sx) if sx > 0 else list(reversed(_cheek(sx))), 0.03, "armor"), 0))
-        for k, v in ((1, 0.22), (2, 0.42)):
-            def vent(bm, sx=sx, v=v):
-                q = _cheek(sx)
-                c = [_bilerp(q, u, vv) for u, vv in ((0.55, v), (0.82, v + 0.04), (0.82, v + 0.12), (0.55, v + 0.08))]
-                c = [p + (p - HELMET_C).normalized() * 0.004 for p in c]
-                return quad_slab(bm, c if sx > 0 else list(reversed(c)), 0.006, "dark")
-            P.append(("Vent%d.%s" % (k, side), "dark", vent, 0))
-        P.append(("Ear." + side, "armor", lambda bm, sx=sx: surface_patch(bm, sx * 76, sx * 108, 1.632, 1.764, 0.99, 1.05, segs=3, rows=3), 0))
+        P.append(("HelmetLine." + side, "trim", lambda bm, sx=sx: (surface_patch(bm, sx * 8.5, sx * 11, 1.773, 1.842, 0.99, 1.02, segs=1, rows=4),
+                                                                   surface_patch(bm, 180 - sx * 8.5, 180 - sx * 11, 1.66, 1.842, 0.99, 1.02, segs=1, rows=6)), 0))
+        for k, z in enumerate((1.598, 1.612, 1.626)):
+            P.append(("Vent%d.%s" % (k + 1, side), "dark", lambda bm, sx=sx, z=z: _vent(bm, sx, z, 36, 52), 0))
     return P
 
 
@@ -573,9 +673,8 @@ def build_body(subdiv=2, target_tris=5500, do_bind=True):
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=bm.edges[:])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-    # boots stand flat on their soles: the underside of each foot is clamped to the sole's top
-    for v in bm.verts:
-        if v.co.z < SOLE_TOP and abs(v.co.x) > 0.08: v.co.z = SOLE_TOP
+    # the boots (separate hard-surface meshes) cover the feet: drop the body below the ankles (hidden, and it poked through)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < BODY_CUT_Z and abs(v.co.x) > 0.06], context="VERTS")
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("Body", me); _collection().objects.link(ob)
     for p in me.polygons: p.use_smooth = True
@@ -761,18 +860,7 @@ def build_armor():
     obj("KneePad", lambda bm: radial_shell(bm, bvh, kn + Vector((0, 0.01, 0.0)), _frame((0, -1, 0), (0, 0, 1)), -48, 48, -38, 42,
                                            0.009, 0.018, "boot", segs=8, rows=5, bulge=0.014),
         {"calf.l": 1.0}, sharp=False, mirror=True)
-    sm = kn.lerp(ank, 0.5)
-    obj("ShinGuard", lambda bm: projected_plate(bm, bvh, sm + Vector((0, -0.08, 0)), (0, -1, 0), (kn - ank).normalized(), 0.115, 0.23,
-                                                poly=POLY_SHIN, n=28, thickness=0.018, bulge=0.003), {"calf.l": 1.0}, mirror=True)
-    # boots: the body's own chunky feet (coloured boot grey), a cuff band hiding the colour edge, and a sole slab
-    obj("BootCuff", lambda bm: wrap_band(bm, bvh, Vector((0.19, 0.05, 0.02)), kn, 0.29, 0.45, 0.006, 0.018, "belt", segs=14, rings=2),
-        {"calf.l": 1.0}, sharp=True, mirror=True)
-    def sole_w(res, mirrored):
-        sfx = ".r" if mirrored else ".l"
-        ys = [v.co.y for v in res]
-        return lambda i: {("toe" + sfx): 1.0} if ys[i] < -0.08 else {("foot" + sfx): 1.0}
-    sole_w.needs_vmap = True
-    obj("Sole", lambda bm: sole_prism(bm, 0.0, 0.036, 0.009), sole_w, mirror=True)
+    made += build_boots()
     return made
 
 
@@ -848,3 +936,186 @@ def sole_prism(bm, z0, z1, grow, n=20, colour="sole"):
     bmesh.ops.triangulate(bm, faces=[F[0], F[1]])
     for f in bm.faces: _uv_face(f, uvl, colour)
     return list(bm.verts)
+
+
+
+# ------------------------------------------------------------------------------------------------ boots
+def _boot_chain(sx):
+    """Skin-chain nodes of one tall boot (concept: up to just under the knee pad, chunky foot, angled toe)."""
+    H, T = _bones()
+    kn, ank = H("calf.l"), Vector((0.189, 0.062, 0.12))
+    P = lambda v: Vector((v[0] * sx, v[1], v[2]))
+    return [("top", P(kn.lerp(ank, 0.2)), (0.118, 0.122)),
+            ("shin", P(kn.lerp(ank, 0.55)), (0.118, 0.124)),
+            ("ankle", P((0.189, 0.058, 0.13)), (0.112, 0.118)),
+            ("instep", P((0.191, -0.04, 0.075)), (0.118, 0.1)),
+            ("toe", P((0.193, -0.165, 0.062)), (0.108, 0.072))]
+
+
+def _skin_mesh(name, nodes, subdiv=2, target_tris=1100):
+    """Closed smooth mesh from a chain of (name, pos, radii) nodes (Skin + Subdivision + Decimate, applied)."""
+    old = bpy.data.objects.get(name + "_src")
+    if old: bpy.data.objects.remove(old, do_unlink=True)
+    me = bpy.data.meshes.new(name + "_src")
+    me.from_pydata([tuple(p) for _, p, _ in nodes], [(i, i + 1) for i in range(len(nodes) - 1)], [])
+    src = bpy.data.objects.new(name + "_src", me); bpy.context.scene.collection.objects.link(src)
+    sk = src.modifiers.new("Skin", "SKIN"); sk.use_smooth_shade = True
+    for i, (_, _, r) in enumerate(nodes): me.skin_vertices[0].data[i].radius = r
+    me.skin_vertices[0].data[0].use_root = True
+    sub = src.modifiers.new("Subdiv", "SUBSURF"); sub.levels = subdiv
+    full = tris(src)
+    dec = src.modifiers.new("Decimate", "DECIMATE"); dec.decimate_type = "COLLAPSE"; dec.ratio = min(1.0, target_tris / full)
+    dg = bpy.context.evaluated_depsgraph_get()
+    out = bpy.data.meshes.new_from_object(src.evaluated_get(dg))
+    bpy.data.objects.remove(src, do_unlink=True); bpy.data.meshes.remove(me)
+    return out
+
+
+SOLE_Z = (0.0, 0.045)         # the boots' sole: bottom and top
+
+
+def _prism_from_points(bm, pts, z0, z1, grow, colour, n=20):
+    """Straight-sided prism from the convex hull of 2D points, grown outward, between z0 and z1."""
+    import numpy as np
+    P = np.array(pts); P = P[np.lexsort((P[:, 1], P[:, 0]))]
+    def cross(o, a, b): return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, up = [], []
+    for p in P:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0: lo.pop()
+        lo.append(tuple(p))
+    for p in P[::-1]:
+        while len(up) >= 2 and cross(up[-2], up[-1], p) <= 0: up.pop()
+        up.append(tuple(p))
+    hull = np.array(lo[:-1] + up[:-1]); c = hull.mean(0)
+    out = []
+    for i in range(n):
+        a = 2 * math.pi * i / n; d = np.array([math.cos(a), math.sin(a)]); best = 0.0
+        for j in range(len(hull)):
+            p, q = hull[j] - c, hull[(j + 1) % len(hull)] - c
+            M = np.array([[d[0], p[0] - q[0]], [d[1], p[1] - q[1]]])
+            if abs(np.linalg.det(M)) < 1e-9: continue
+            t, u = np.linalg.solve(M, p)
+            if t > 0 and 0 <= u <= 1: best = max(best, t)
+        out.append(c + d * (best + grow))
+    uvl = bm.loops.layers.uv.verify()
+    top = [bm.verts.new((p[0], p[1], z1)) for p in out]; bot = [bm.verts.new((p[0], p[1], z0)) for p in out]
+    F = [bm.faces.new(top), bm.faces.new(list(reversed(bot)))]
+    for i in range(n):
+        j = (i + 1) % n; F.append(bm.faces.new([bot[i], bot[j], top[j], top[i]]))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    bmesh.ops.triangulate(bm, faces=[F[0], F[1]])
+    for f in bm.faces: _uv_face(f, uvl, colour)
+    return list(bm.verts)
+
+
+# boot foot: cross-sections from heel to toe (y, half width, height above the sole top, top chamfer); concept: blocky, rising at
+# the back to the ankle, chamfered down toward the toe
+BOOT_FOOT = [(0.142, 0.074, 0.150, 0.03), (0.10, 0.084, 0.168, 0.03), (0.05, 0.085, 0.165, 0.03), (0.0, 0.083, 0.140, 0.03), (-0.06, 0.081, 0.112, 0.03),
+             (-0.12, 0.076, 0.092, 0.03), (-0.165, 0.066, 0.075, 0.028), (-0.192, 0.052, 0.058, 0.02)]
+BOOT_TOP_Z = 0.44             # shaft top, just under the knee pad
+
+
+def _foot_loft(bm, sx, colour="boot"):
+    """The boot's foot block: chamfered rounded-rectangle cross-sections lofted from heel to toe, capped at both ends."""
+    uvl = bm.loops.layers.uv.verify()
+    x0 = 0.192 * sx
+    rings = []
+    for y, hw, h, ch in BOOT_FOOT:
+        z0, z1 = SOLE_Z[1], SOLE_Z[1] + h
+        c = min(ch, 0.45 * hw)
+        pts = [(hw, z0), (hw, z1 - c), (hw - c, z1), (-hw + c, z1), (-hw, z1 - c), (-hw, z0)]
+        rings.append([bm.verts.new((x0 + px, y, pz)) for px, pz in pts])
+    F = []
+    n = len(rings[0])
+    for r0, r1 in zip(rings, rings[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            F.append(bm.faces.new([r0[i], r0[j], r1[j], r1[i]]))
+    F.append(bm.faces.new(list(reversed(rings[0])))); F.append(bm.faces.new(rings[-1]))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    for f in F: _uv_face(f, uvl, colour)
+    return list(bm.verts)
+
+
+def _shaft_loft(bm, bvh, sx, z0, z1, rows=4, segs=10, extra=0.014, colour="boot"):
+    """The boot shaft: rings fitted around the leg (ray casts from the leg axis) plus `extra`, `segs`-sided so it reads faceted,
+    lofted from z0 to z1 and closed at the bottom; open at the top (the leg goes in)."""
+    uvl = bm.loops.layers.uv.verify()
+    H, T = _bones()
+    kn = H("calf.l"); kn = Vector((kn.x * sx, kn.y, kn.z)); ank = Vector((0.189 * sx, 0.055, 0.12))
+    rings = []
+    for j in range(rows + 1):
+        z = z0 + (z1 - z0) * j / rows
+        t = (z - ank.z) / (kn.z - ank.z); o = ank.lerp(kn, t)
+        ring = []
+        for i in range(segs):
+            a = 2 * math.pi * (i + 0.5) / segs
+            d = Vector((math.sin(a), -math.cos(a), 0))
+            hit, hn, _, dist = bvh.ray_cast(o, d, 0.4)
+            r = (dist if hit is not None else 0.07) + extra + 0.004 * (1 - j / rows)
+            ring.append(bm.verts.new(o + d * r))
+        rings.append(ring)
+    F = []
+    for r0, r1 in zip(rings, rings[1:]):
+        for i in range(segs):
+            k = (i + 1) % segs
+            F.append(bm.faces.new([r0[i], r0[k], r1[k], r1[i]]))
+    # a thin rim at the top (inner wall) so the open top has thickness
+    inner = [bm.verts.new(v.co + (Vector((rings[-1][0].co.x * 0 + (o.x), o.y, v.co.z)) - v.co).normalized() * 0.012) for v in rings[-1]]
+    for i in range(segs):
+        k = (i + 1) % segs
+        F.append(bm.faces.new([rings[-1][i], rings[-1][k], inner[k], inner[i]]))
+    F.append(bm.faces.new(list(reversed(rings[0]))))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    for f in F: _uv_face(f, uvl, colour)
+    return list(bm.verts)
+
+
+def build_boots():
+    """Tall hard-surface boots (concept): a faceted shaft to just under the knee pad with two straps and a front plate, a blocky
+    foot rising at the back and chamfered to the toe, an ankle strap over the seam, a thick sole and a heel block."""
+    made = []
+    body_bvh_ = body_bvh()
+    for side, sx in (("l", 1), ("r", -1)):
+        old = bpy.data.objects.get("Boot." + side)
+        if old: bpy.data.objects.remove(old, do_unlink=True)
+        calf = {"calf." + side: 1.0}
+        bm = bmesh.new(); _shaft_loft(bm, body_bvh_, sx, 0.1, BOOT_TOP_Z)
+        made.append(_finish_object("BootShaft." + side, bm, calf, sharp=True).name)
+        bm = bmesh.new(); res = _foot_loft(bm, sx)
+        ys = [v.co.y for v in res]
+        def fw(i, ys=ys, side=side):
+            y = ys[i]
+            if y < -0.11: return {"toe." + side: 1.0}
+            if y < -0.05: t = (-0.05 - y) / 0.06; return {"foot." + side: 1 - t, "toe." + side: t}
+            return {"foot." + side: 1.0}
+        made.append(_finish_object("BootFoot." + side, bm, fw, sharp=True).name)
+        # boot surfaces for the details: shaft + foot
+        shaft = bpy.data.objects["BootShaft." + side]; foot = bpy.data.objects["BootFoot." + side]
+        V, Pp = [], []
+        for ob in (shaft, foot):
+            off = len(V); V += [v.co.copy() for v in ob.data.vertices]; Pp += [tuple(i + off for i in p.vertices) for p in ob.data.polygons]
+        bvh = BVHTree.FromPolygons(V, Pp)
+        H, T = _bones()
+        kn = H("calf.l"); kn = Vector((kn.x * sx, kn.y, kn.z)); ank = Vector((0.189 * sx, 0.055, 0.12))
+        for k, z in enumerate((0.26, 0.37)):
+            t0 = (z - ank.z) / (kn.z - ank.z); t1 = (z + 0.026 - ank.z) / (kn.z - ank.z)
+            bm = bmesh.new(); wrap_band(bm, bvh, ank, kn, t0, t1, 0.001, 0.01, "belt", segs=10, rings=1)
+            made.append(_finish_object("BootStrap%d.%s" % (k + 1, side), bm, calf, sharp=True).name)
+        ta, tb = (0.135 - ank.z) / (kn.z - ank.z), (0.175 - ank.z) / (kn.z - ank.z)
+        bm = bmesh.new(); wrap_band(bm, bvh, ank, kn, ta, tb, 0.002, 0.012, "belt", segs=10, rings=1)
+        made.append(_finish_object("BootAnkle." + side, bm, calf, sharp=True).name)
+        mid = ank.lerp(kn, 0.56)
+        bm = bmesh.new()
+        projected_plate(bm, bvh, mid + Vector((0, -0.12, 0)), (0, -1, 0), (kn - ank).normalized(), 0.1, 0.15, colour="armor",
+                        poly=POLY_SHIN, n=24, thickness=0.012, bulge=0.0, gap=0.001, rings=(1.0, 0.5))
+        made.append(_finish_object("BootShin." + side, bm, calf).name)
+        # sole and heel from the foot's exact outline
+        outline = [(v.co.x, v.co.y) for v in foot.data.vertices]
+        bm = bmesh.new(); res = _prism_from_points(bm, outline, SOLE_Z[0] + 0.012, SOLE_Z[1] + 0.002, 0.008, "sole")
+        ys2 = [v.co.y for v in res]
+        made.append(_finish_object("Sole." + side, bm, (lambda i, ys=ys2, side=side: {("toe." + side): 1.0} if ys[i] < -0.09 else {("foot." + side): 1.0}),
+                                   sharp=True).name)
+        bm = bmesh.new(); _prism_from_points(bm, [p for p in outline if p[1] >= 0.03], SOLE_Z[0], SOLE_Z[0] + 0.014, 0.012, "dark")
+        made.append(_finish_object("Heel." + side, bm, {"foot." + side: 1.0}, sharp=True).name)
+    return made
