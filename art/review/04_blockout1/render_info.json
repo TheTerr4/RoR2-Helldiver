@@ -1,0 +1,102 @@
+{
+  "blend": "H:\\universal-modder\\work\\risk-of-rain-2\\HelldiverMod\\art\\helldiver.blend",
+  "mode": "clay",
+  "engine": "workbench",
+  "bbox_min": [
+    -0.43004971742630005,
+    -0.16500000655651093,
+    -4.656622309973102e-10
+  ],
+  "bbox_max": [
+    0.43004968762397766,
+    0.21299999952316284,
+    1.8989999294281006
+  ],
+  "size_xyz": [
+    0.8600994348526001,
+    0.37800002098083496,
+    1.8989999294281006
+  ],
+  "objects": [
+    "Hips",
+    "Belt",
+    "Buckle",
+    "PouchA.l",
+    "PouchA.r",
+    "PouchB.l",
+    "PouchB.r",
+    "Abdomen",
+    "AbPlate",
+    "Chest",
+    "ChestTrim",
+    "ChestPlate",
+    "Collar",
+    "CollarTrim",
+    "Helmet",
+    "HelmetStripe",
+    "Brow",
+    "Visor",
+    "Jaw",
+    "Vent.l",
+    "Vent.r",
+    "Ear.l",
+    "Ear.r",
+    "Shoulder.l",
+    "Shoulder.r",
+    "ShoulderTrim.l",
+    "ShoulderTrim.r",
+    "UpperArm.l",
+    "UpperArm.r",
+    "Forearm.l",
+    "Forearm.r",
+    "Glove.l",
+    "Glove.r",
+    "Thigh.l",
+    "Thigh.r",
+    "ThighPlate.l",
+    "ThighPlate.r",
+    "Knee.l",
+    "Knee.r",
+    "Shin.l",
+    "Shin.r",
+    "ShinGuard.l",
+    "ShinGuard.r",
+    "BootShaft.l",
+    "BootShaft.r",
+    "Boot.l",
+    "Boot.r",
+    "Toe.l",
+    "Toe.r",
+    "Sole.l",
+    "Sole.r"
+  ],
+  "renders": {
+    "front": {
+      "file": "review/04_blockout1\\clay_front.png",
+      "az_el_lens": [
+        0,
+        0,
+        0
+      ],
+      "distance": 4.1890000104904175
+    },
+    "side": {
+      "file": "review/04_blockout1\\clay_side.png",
+      "az_el_lens": [
+        90,
+        0,
+        0
+      ],
+      "distance": 4.4300497174263
+    },
+    "back": {
+      "file": "review/04_blockout1\\clay_back.png",
+      "az_el_lens": [
+        180,
+        0,
+        0
+      ],
+      "distance": 4.1890000104904175
+    }
+  }
+}

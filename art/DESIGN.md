@@ -29,4 +29,4 @@ disagree, the turnaround wins. Concept A was picked, with concept C's helmet rec
 
 ## Style rules
 See `STYLE_GUIDE.md`: flat colour blocks from a palette atlas, modelled bevels, smoothness 0, emission only for the visor, and a
-budget of 7,000 triangles or fewer for the body.
+budget of about 11,000 triangles for the body (20,000 for everything).

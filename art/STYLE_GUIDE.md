@@ -77,11 +77,11 @@ The screenshots stay local in `work/risk-of-rain-2/art-ref/` (they show the game
 
 | Part | Budget |
 |---|---|
-| Body | ≤ 7,000 (12,000 now) |
-| Each weapon | ≤ 2,000 |
-| Jump pack | ≤ 1,500 |
-| Cape | 192 (unchanged) |
-| **Total visible** | **≤ 11,000**, under the median (17,300 now) |
+| Body | ≤ 11,000 (12,000 now) |
+| Each weapon | ≤ 3,000 |
+| Jump pack | ≤ 2,500 |
+| Cape | the rest (192 now) |
+| **Total visible** | **≤ 20,000** (Terr4, 2026-10-24: above the 12.7k median, to leave room for the weapons and pack; 17,300 now) |
 
 **Textures:**
 - **Colour:** one 512×512 atlas per asset. The top half holds flat palette swatches, each with a slight vertical gradient (UVs
