@@ -51,6 +51,7 @@
     <Reference Include="$(Plug)MMHOOK/MMHOOK_RoR2.dll" Private="false" />
     <Reference Include="$(Lab)BepInEx\core\MonoMod.RuntimeDetour.dll" Private="false" />
     <Reference Include="$(Lab)BepInEx\core\MonoMod.Utils.dll" Private="false" />
+    <Reference Include="$(Managed)AsyncManagement.dll" Private="false" />
   </ItemGroup>
   <!-- Dev/ is the lab test bridge and benchmark: Lab configuration only -->
   <ItemGroup Condition="'$(Configuration)'!='Lab'">

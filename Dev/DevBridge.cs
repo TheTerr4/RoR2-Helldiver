@@ -722,6 +722,8 @@ namespace HelldiverMod
                     Say("stage " + arg);
                     break;
                 }
+                case "lineup": Lineup(arg); break;              // DevArt.cs: survivor display models side by side, own camera
+                case "matdump": StartCoroutine(MatDump()); break;   // DevArt.cs: every survivor's meshes and materials -> BepInEx/matdump.txt
                 default: Say("unknown command " + cmd); break;
             }
         }
