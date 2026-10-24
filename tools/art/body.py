@@ -215,9 +215,9 @@ def _mirror_name(n):
     return n[:-2] + ".r" if n.endswith(".l") else n
 
 
-def _shade(me):
+def _shade(me, deg=None):
     bm = bmesh.new(); bm.from_mesh(me)
-    lim = math.radians(SHARP_DEG)
+    lim = math.radians(SHARP_DEG if deg is None else deg)
     for f in bm.faces: f.smooth = True
     for e in bm.edges:
         e.smooth = not (len(e.link_faces) == 2 and e.calc_face_angle(0.0) > lim) and len(e.link_faces) == 2

@@ -107,6 +107,7 @@ HELMET_C = Vector((0.0, 0.035, 1.70))      # centre of the dome
 HELMET_R = (0.126, 0.138, 0.148)           # half sizes x, y, z (smaller than block-out 1, per Terr4)
 HELMET_P = 3.0                             # horizontal squareness (2 = round, higher = flatter sides)
 HELMET_Q = 2.1 
+HELMET_SHARP_DEG = 20.0                     # crease angle on the helmet's faceted parts
 HELMET_FLARE = 0.16                         # how much the lower half flares outward                            # vertical squareness
 
 
@@ -225,20 +226,20 @@ def gog_top(az):
 
 
 def _shell_scale(az, z):
-    """How far the helmet shell sits from the dome (1 = dome). The face pushes forward below the goggles (one smooth surface,
-    no plates), a brow bulges just above them, and the whole lower part flares outward."""
+    """How far the helmet shell sits from the dome (1 = dome). Piecewise linear on purpose, so the face reads as flat planes:
+    a centre front plane (|az| <= 20) and two cheek planes falling back to the sides, a horizontal crease under the goggles and a
+    chamfered chin; a brow bulge over the goggles; and the lower flange: a crisp ledge at z 1.64, then straight down."""
     a = abs(((az + 180) % 360) - 180)
-    front = max(0.0, math.cos(math.radians(min(a, 80.0) * 90.0 / 80.0))) ** 1.4
-    face = 0.15 * front * max(0.0, min(1.0, (1.70 - z) / 0.055))
-    chin = 0.03 * front * max(0.0, min(1.0, (1.605 - z) / 0.025))
+    front = max(0.0, min(1.0, (75.0 - a) / 55.0))
+    face = 0.15 * front * max(0.0, min(1.0, (1.70 - z) / 0.035))
+    chin = 0.04 * front * max(0.0, min(1.0, (1.612 - z) / 0.022))
     brow = 0.055 * front * max(0.0, 1.0 - abs(z - 1.748) / 0.016)
-    # a distinct shelf: steps out quickly below 1.636, then keeps flaring gently to the bottom edge
-    flare = 0.075 * max(0.0, min(1.0, (1.637 - z) / 0.012)) + 0.03 * max(0.0, min(1.0, (1.622 - z) / 0.045))
+    flare = 0.07 * max(0.0, min(1.0, (1.6405 - z) / 0.004)) + 0.022 * max(0.0, min(1.0, (1.62 - z) / 0.04))
     return 1.0 + face - chin + brow + flare
 
 
 SHELL_COLS = 36
-SHELL_ROWS_Z = [1.574, 1.590, 1.606, 1.622, 1.638, 1.654, 1.670, None, None, 1.756, 1.772]   # None = goggle bottom / top rows
+SHELL_ROWS_Z = [1.574, 1.590, 1.606, 1.612, 1.622, 1.6365, 1.6405, 1.656, 1.665, 1.672, None, None, 1.756, 1.772]   # None = goggle bottom / top rows
 
 
 def _shell_rows():
@@ -360,7 +361,7 @@ def build_helmet():
         if subdiv: 
             for p in me.polygons: p.use_smooth = True
         else:
-            palette._shade(me)
+            palette._shade(me, HELMET_SHARP_DEG)
         ob.vertex_groups.new(name="head").add(range(len(me.vertices)), 1.0, "REPLACE")
         ob.parent = bpy.data.objects[RIG]
         a = ob.modifiers.new("Armature", "ARMATURE"); a.object = bpy.data.objects[RIG]
