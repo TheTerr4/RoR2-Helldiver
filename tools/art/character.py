@@ -18,6 +18,7 @@ from mathutils import Vector
 RIG = "HelldiverRig"
 COLLECTION = "Helldiver"
 SKIN_SCALE = 1.0
+SOLE_TOP = 0.03           # height of the boot soles' top face
 NO_DEFORM = {"base"}       # behind the hips; Commando's mesh doesn't use it either
 RIGGING_SKILL = r"C:\Users\Terr4\.claude\skills\blender-character-rigging\scripts"
 
@@ -65,17 +66,15 @@ def skeleton():
         n = "thumb.tip." + s; node(n, P(T("thumb.2.l")), (0.018, 0.018)); ns.append(n)
         chain(*ns)
         hip, kn = H("thigh.l"), H("calf.l")
-        ankle = Vector((0.189, 0.05, 0.13))
+        ankle = Vector((0.189, 0.062, 0.12))
         node("hip." + s, P((hip.x, hip.y, hip.z - 0.02)), (0.13, 0.13))
         node("thigh." + s, P(hip.lerp(kn, 0.5)), (0.115, 0.115))
         node("knee." + s, P(kn), (0.092, 0.095))
         node("calf." + s, P(kn.lerp(ankle, 0.42) + Vector((0, 0.012, 0))), (0.09, 0.095))
-        node("ankle." + s, P(ankle), (0.078, 0.085))
-        node("instep." + s, P((0.191, -0.035, 0.05)), (0.09, 0.078))
-        node("toe." + s, P((0.193, -0.14, 0.032)), (0.085, 0.056))
-        node("heel." + s, P((0.192, 0.095, 0.036)), (0.075, 0.058))
+        node("ankle." + s, P(ankle), (0.088, 0.092))
+        node("instep." + s, P((0.191, -0.035, 0.05)), (0.1, 0.085))
+        node("toe." + s, P((0.193, -0.145, 0.034)), (0.096, 0.06))
         chain("pelvis", "hip." + s, "thigh." + s, "knee." + s, "calf." + s, "ankle." + s, "instep." + s, "toe." + s)
-        chain("ankle." + s, "heel." + s)
     return N, E, "pelvis"
 
 
@@ -104,10 +103,11 @@ def tris(ob):
 # ------------------------------------------------------------------------------------------------ helmet
 import math
 
-HELMET_C = Vector((0.0, 0.035, 1.712))     # centre of the dome
-HELMET_R = (0.124, 0.133, 0.152)           # half sizes x, y, z (smaller than block-out 1, per Terr4)
-HELMET_P = 3.4                             # horizontal squareness (2 = round, higher = flatter sides)
-HELMET_Q = 2.15                            # vertical squareness
+HELMET_C = Vector((0.0, 0.035, 1.70))      # centre of the dome
+HELMET_R = (0.126, 0.138, 0.148)           # half sizes x, y, z (smaller than block-out 1, per Terr4)
+HELMET_P = 3.0                             # horizontal squareness (2 = round, higher = flatter sides)
+HELMET_Q = 2.1 
+HELMET_FLARE = 0.16                         # how much the lower half flares outward                            # vertical squareness
 
 
 def _se(t, e):
@@ -118,8 +118,9 @@ def helmet_point(az, el, s=1.0):
     """Point on the helmet surface: az = degrees around z from the front (-y) toward +x, el = degrees above the centre."""
     a, e = math.radians(az), math.radians(el)
     ce, se_ = math.cos(e), math.sin(e)
-    x = HELMET_R[0] * s * _se(ce, 2 / HELMET_Q) * _se(math.sin(a), 2 / HELMET_P)
-    y = -HELMET_R[1] * s * _se(ce, 2 / HELMET_Q) * _se(math.cos(a), 2 / HELMET_P)
+    flare = 1.0 + HELMET_FLARE * max(0.0, -se_)          # the lower half widens into the jaw guards (concept front view)
+    x = HELMET_R[0] * s * flare * _se(ce, 2 / HELMET_Q) * _se(math.sin(a), 2 / HELMET_P)
+    y = -HELMET_R[1] * s * flare * _se(ce, 2 / HELMET_Q) * _se(math.cos(a), 2 / HELMET_P)
     z = HELMET_R[2] * s * _se(se_, 2 / HELMET_Q)
     return HELMET_C + Vector((x, y, z))
 
@@ -180,32 +181,65 @@ def helmet_dome(bm, segs=20, rings=9, bottom_z=1.585):
     return list(bm.verts)
 
 
-JAW_Z = (1.582, 1.686)
+def hp(az, z, s):
+    """Helmet-space point from (azimuth, height, scale)."""
+    return helmet_point(az, el_at(z), s)
 
 
-def _jaw_scale(a, z):
-    """The jaw guard is a faceted prow: a ridge down the centre, flat cheek planes falling back toward the ears, jutting forward
-    and down toward the chin (concept side view)."""
-    ridge = max(0.0, 1.0 - abs(a) / 70.0)
-    low = max(0.0, min(1.0, (1.686 - z) / 0.10))
-    return 1.015 + 0.07 * ridge + 0.05 * ridge * low
+def quad_slab(bm, corners, thickness, colour, uvl=None, inward=True):
+    """A flat-faced slab from 4 corner points (counter-clockwise seen from outside): the front face is the quad, the back face
+    sits `thickness` toward the helmet centre. Faceted on purpose (the concept's angular mask plates)."""
+    uvl = uvl or bm.loops.layers.uv.verify()
+    front = [bm.verts.new(c) for c in corners]
+    back = [bm.verts.new(c + (HELMET_C - c).normalized() * thickness) for c in corners]
+    F = [bm.faces.new(front), bm.faces.new(list(reversed(back)))]
+    for i in range(4):
+        j = (i + 1) % 4
+        F.append(bm.faces.new([front[j], front[i], back[i], back[j]]))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    for f in F: _uv_face(f, uvl, colour)
+    return front + back
+
+
+def _bilerp(q, u, v):
+    """Point at (u, v) in a quad (p00, p10, p11, p01)."""
+    p00, p10, p11, p01 = q
+    return (p00 * (1 - u) + p10 * u) * (1 - v) + (p01 * (1 - u) + p11 * u) * v
+
+
+def _cheek(sx):
+    """Left (sx = 1) or right (sx = -1) cheek plate corners: from beside the centre plate back toward the ear, its lower edge
+    rising diagonally toward the jaw corner (concept side view)."""
+    return [hp(sx * 15, 1.596, 1.135), hp(sx * 58, 1.626, 1.035), hp(sx * 56, 1.694, 1.05), hp(sx * 18.5, 1.696, 1.098)]
 
 
 def helmet_parts():
-    """(name, colour, builder(bm), subdiv). All weighted 100% to the head bone. subdiv 0 parts are faceted on purpose."""
+    """(name, colour, builder(bm), subdiv). All weighted 100% to the head bone. subdiv 0 parts are faceted on purpose.
+    Shape (concept turnaround + helmet sheet): a smooth dome with a raised centre strip bordered by two yellow lines, a thin brow
+    lip, a recessed amber visor, an angular mask (centre plate jutting forward and down, cheek plates angled back) with two vent
+    slots low on each cheek, and a rounded ear panel on each side."""
     P = []
     P.append(("Helmet", "armor", lambda bm: helmet_dome(bm), 1))
-    P.append(("HelmetStripe", "trim", lambda bm: surface_patch(bm, -3.5, 3.5, 1.762, 1.862, 0.99, 1.012, segs=1, rows=8), 0))
-    P.append(("Brow", "armor", lambda bm: surface_patch(bm, -76, 76, 1.734, 1.764, 0.975, 1.07, segs=12, rows=1), 1))
-    P.append(("Visor", "visor", lambda bm: surface_patch(bm, -66, 66, 1.683, 1.736, 0.96, 1.02, segs=12, rows=1), 1))
-    P.append(("Jaw", "armor", lambda bm: surface_patch(bm, -72, 72, JAW_Z[0], JAW_Z[1], 0.95, _jaw_scale, segs=6, rows=2), 0))
+    # raised centre strip from the brow over the top and down the back, yellow lines along both sides
+    P.append(("HelmetRidge", "armor", lambda bm: (surface_patch(bm, -8, 8, 1.752, 1.846, 0.99, 1.025, segs=2, rows=5),
+                                                  surface_patch(bm, 172, 188, 1.64, 1.846, 0.99, 1.025, segs=2, rows=6)), 0))
     for side, sx in (("l", 1), ("r", -1)):
-        for k, z in ((1, 1.650), (2, 1.630)):
-            # dark slots lying 3-6 mm proud of the jaw's cheek plane
-            P.append(("Vent%d.%s" % (k, side), "dark",
-                      lambda bm, sx=sx, z=z: surface_patch(bm, sx * 30, sx * 46, z - 0.0055, z + 0.0055,
-                                                           lambda a, zz: _jaw_scale(a, zz) - 0.01, lambda a, zz: _jaw_scale(a, zz) + 0.006, segs=2, rows=1), 0))
-        P.append(("Ear." + side, "armor", lambda bm, sx=sx: surface_patch(bm, sx * 78, sx * 104, 1.635, 1.75, 0.985, 1.035, segs=4, rows=3), 1))
+        P.append(("HelmetLine." + side, "trim", lambda bm, sx=sx: (surface_patch(bm, sx * 8.5, sx * 11, 1.749, 1.846, 0.99, 1.02, segs=1, rows=5),
+                                                                   surface_patch(bm, 180 - sx * 8.5, 180 - sx * 11, 1.64, 1.846, 0.99, 1.02, segs=1, rows=6)), 0))
+    P.append(("Brow", "armor", lambda bm: surface_patch(bm, -68, 68, 1.732, 1.752, 0.98, 1.10, segs=8, rows=1), 0))
+    P.append(("Visor", "visor", lambda bm: surface_patch(bm, -58, 58, 1.694, 1.734, 0.95, 1.03, segs=8, rows=1), 0))
+    # mask: centre plate rising into the visor's lower edge (the notch), jutting forward and down to a flat chin
+    P.append(("MaskCentre", "armor", lambda bm: quad_slab(bm, [hp(-16, 1.588, 1.15), hp(16, 1.588, 1.15), hp(19, 1.702, 1.105), hp(-19, 1.702, 1.105)], 0.03, "armor"), 0))
+    for side, sx in (("l", 1), ("r", -1)):
+        P.append(("Cheek." + side, "armor", lambda bm, sx=sx: quad_slab(bm, _cheek(sx) if sx > 0 else list(reversed(_cheek(sx))), 0.03, "armor"), 0))
+        for k, v in ((1, 0.22), (2, 0.42)):
+            def vent(bm, sx=sx, v=v):
+                q = _cheek(sx)
+                c = [_bilerp(q, u, vv) for u, vv in ((0.55, v), (0.82, v + 0.04), (0.82, v + 0.12), (0.55, v + 0.08))]
+                c = [p + (p - HELMET_C).normalized() * 0.004 for p in c]
+                return quad_slab(bm, c if sx > 0 else list(reversed(c)), 0.006, "dark")
+            P.append(("Vent%d.%s" % (k, side), "dark", vent, 0))
+        P.append(("Ear." + side, "armor", lambda bm, sx=sx: surface_patch(bm, sx * 76, sx * 108, 1.632, 1.764, 0.99, 1.05, segs=3, rows=3), 0))
     return P
 
 
@@ -261,14 +295,20 @@ def _uv_face(f, uvl, colour):
 
 
 def projected_plate(bm, bvh, center, normal, up, w, h, colour="armor", trim=None, squareness=4.0, thickness=0.02, gap=0.004,
-                    taper=0.0, n=20, rings=(1.0, 0.86, 0.45), band=1, bulge=0.0, axis=None):
+                    taper=0.0, n=20, rings=(1.0, 0.86, 0.45), band=1, bulge=0.0, axis=None, poly=None, max_dist=1.0):
     """An armour plate whose outline (a superellipse w x h, optionally tapered toward the bottom) is drawn in the plane
     (center, normal, up), projected onto the body along -normal, lifted by gap and given a thickness. The outer `band` ring of
     the front face and the rim take the `trim` colour (the concept's yellow outlines). Returns the new verts."""
     uvl = bm.loops.layers.uv.verify()
     nrm = Vector(normal).normalized(); upv = Vector(up); upv = (upv - nrm * upv.dot(nrm)).normalized(); rgt = upv.cross(nrm)
     c = Vector(center)
+    if poly is not None:
+        pts = _poly_samples(poly, n)
+        n = len(pts)
     def outline(t):
+        if poly is not None:
+            px, py = pts[int(round(t / (2 * math.pi) * n)) % n]
+            return px * w, py * h
         x = 0.5 * w * math.copysign(abs(math.cos(t)) ** (2 / squareness), math.cos(t))
         y = 0.5 * h * math.copysign(abs(math.sin(t)) ** (2 / squareness), math.sin(t))
         if taper and y < 0: x *= 1.0 - taper * (-y / (0.5 * h))
@@ -283,7 +323,7 @@ def projected_plate(bm, bvh, center, normal, up, w, h, colour="armor", trim=None
             pp = c + rgt * x + upv * y
             q = a0 + ad * (pp - a0).dot(ad)
             o, d_ray = q, (pp - q).normalized()
-        hit, hn, _, _ = bvh.ray_cast(o, d_ray, 1.0)
+        hit, hn, _, _ = bvh.ray_cast(o, d_ray, max_dist)
         if hit is None: hit, hn = c + rgt * x + upv * y, nrm
         d = (hn * 0.5 + nrm * 0.5).normalized()
         back = hit + hn * gap
@@ -314,6 +354,55 @@ def projected_plate(bm, bvh, center, normal, up, w, h, colour="armor", trim=None
         _uv_face(bm.faces.new([a[0], b[0], b[1], a[1]]), uvl, tc)
     bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
     return list(bm.verts)
+
+
+def _poly_samples(poly, n):
+    """n points around a closed polygon (unit-size coordinates, counter-clockwise), every corner included, the rest spread by
+    edge length, starting at the corner nearest angle 0 so the ring indexing matches the superellipse outline's."""
+    import math as _m
+    P = [Vector((x, y, 0)) for x, y in poly]
+    start = min(range(len(P)), key=lambda i: abs(_m.atan2(P[i].y, P[i].x)))
+    P = P[start:] + P[:start]
+    L = [(P[(i + 1) % len(P)] - P[i]).length for i in range(len(P))]
+    total = sum(L); extra = n - len(P)
+    counts = [1 + int(round(extra * l / total)) for l in L]
+    out = []
+    for i, c in enumerate(counts):
+        a, b = P[i], P[(i + 1) % len(P)]
+        for k in range(c): out.append(tuple(a.lerp(b, k / c))[:2])
+    return out
+
+
+# concept outlines (unit size, counter-clockwise from the right): chamfered, straight-edged plates
+POLY_CHEST = [(0.5, 0.32), (0.42, 0.5), (-0.42, 0.5), (-0.5, 0.32), (-0.42, -0.15), (-0.2, -0.5), (0.2, -0.5), (0.42, -0.15)]
+POLY_BACK = [(0.5, 0.38), (0.42, 0.5), (-0.42, 0.5), (-0.5, 0.38), (-0.5, -0.38), (-0.4, -0.5), (0.4, -0.5), (0.5, -0.38)]
+POLY_THIGH = [(0.5, 0.3), (0.28, 0.5), (-0.28, 0.5), (-0.5, 0.3), (-0.42, -0.28), (0.0, -0.5), (0.42, -0.28)]
+POLY_SHIN = [(0.5, 0.42), (0.38, 0.5), (-0.38, 0.5), (-0.5, 0.42), (-0.5, -0.25), (-0.25, -0.5), (0.25, -0.5), (0.5, -0.25)]
+
+POLY_SOLE = [(0.5, 0.2), (0.42, 0.42), (0.2, 0.5), (-0.2, 0.5), (-0.42, 0.42), (-0.5, 0.2), (-0.46, -0.32), (-0.3, -0.5), (0.3, -0.5), (0.46, -0.32)]
+POLY_BUCKLE = [(0.5, 0.32), (0.38, 0.5), (-0.38, 0.5), (-0.5, 0.32), (-0.5, -0.32), (-0.38, -0.5), (0.38, -0.5), (0.5, -0.32)]
+
+
+def oriented_box(bm, center, out, up, size, colour, chamfer=0.004):
+    """A box at `center` whose depth (size[2]) runs along `out`, height (size[1]) along `up`; edges chamfered (hard-surface)."""
+    from mathutils import Matrix
+    z = Vector(out).normalized(); y = Vector(up); y = (y - z * y.dot(z)).normalized(); x = y.cross(z)
+    rot = Matrix((x, y, z)).transposed().to_4x4()
+    m = Matrix.Translation(Vector(center)) @ rot @ Matrix.Diagonal((size[0], size[1], size[2], 1.0))
+    r = bmesh.ops.create_cube(bm, size=1.0, matrix=m)
+    vs = r["verts"]
+    if chamfer > 0:
+        edges = list({e for v in vs for e in v.link_edges})
+        res = bmesh.ops.bevel(bm, geom=edges + vs, offset=min(chamfer, 0.45 * min(size)), segments=1, affect="EDGES", clamp_overlap=True)
+        vs = list({v for v in vs if v.is_valid} | set(res["verts"]))
+    uvl = bm.loops.layers.uv.verify()
+    for f in {f for v in vs for f in v.link_faces}: _uv_face(f, uvl, colour)
+    return vs
+
+
+def surface_at(bvh, origin, direction):
+    hit, hn, _, dist = bvh.ray_cast(Vector(origin), Vector(direction).normalized(), 1.0)
+    return hit, hn
 
 
 def region_shell(bm, faces_filter, offset, thickness, colour, trim_loops=None):
@@ -484,6 +573,9 @@ def build_body(subdiv=2, target_tris=5500, do_bind=True):
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=bm.edges[:])
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    # boots stand flat on their soles: the underside of each foot is clamped to the sole's top
+    for v in bm.verts:
+        if v.co.z < SOLE_TOP and abs(v.co.x) > 0.08: v.co.z = SOLE_TOP
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("Body", me); _collection().objects.link(ob)
     for p in me.polygons: p.use_smooth = True
@@ -509,7 +601,7 @@ def colour_body(ob):
             for g in me.vertices[vi].groups: w[groups[g.group]] = w.get(groups[g.group], 0) + g.weight
         hand = sum(v for k, v in w.items() if k.startswith(("hand", "finger", "thumb")))
         z = p.center.z
-        col = "dark" if hand > 0.5 * len(p.vertices) else ("sole" if z < 0.035 else ("boot" if z < 0.19 else "suit"))
+        col = "dark" if hand > 0.5 * len(p.vertices) else ("boot" if z < 0.185 else "suit")
         u = palette.swatch_uv(col)
         for li in p.loop_indices: uvl.data[li].uv = u
 
@@ -620,11 +712,11 @@ def build_armor():
             if callable(w) and getattr(w, "needs_vmap", False): w = w(res, side[1])
             made.append(_finish_object(nm, bm, w, subdiv=subdiv, sharp=sharp).name)
     # --- torso
-    obj("ChestPlate", lambda bm: projected_plate(bm, bvh, (0, -0.15, 1.395), (0, -1, 0.1), (0, 0, 1), 1.0, 0.31, trim="trim",
-                                                 squareness=3.6, thickness=0.022, taper=0.32, bulge=0.008,
+    obj("ChestPlate", lambda bm: projected_plate(bm, bvh, (0, -0.15, 1.395), (0, -1, 0.1), (0, 0, 1), 0.95, 0.32, trim="trim",
+                                                 thickness=0.024, bulge=0.004, n=40, poly=POLY_CHEST,
                                                  axis=((0, 0.03, 1.0), (0, 0.06, 1.6))), {"chest": 1.0})
-    obj("BackPlate", lambda bm: projected_plate(bm, bvh, (0, 0.17, 1.38), (0, 1, 0.08), (0, 0, 1), 0.9, 0.28, squareness=3.2,
-                                                thickness=0.018, bulge=0.004, axis=((0, 0.03, 1.0), (0, 0.06, 1.6))), {"chest": 1.0})
+    obj("BackPlate", lambda bm: projected_plate(bm, bvh, (0, 0.17, 1.38), (0, 1, 0.08), (0, 0, 1), 0.9, 0.28, poly=POLY_BACK, n=36,
+                                                thickness=0.02, bulge=0.003, axis=((0, 0.03, 1.0), (0, 0.06, 1.6))), {"chest": 1.0})
     def shell_w(filter_fn, offset, thickness, colour, trim=None):
         def build(bm):
             return region_shell(bm, filter_fn, offset, thickness, colour, trim_loops=trim)
@@ -638,13 +730,24 @@ def build_armor():
                                        trim="trim", trim_top=True, flare=-0.01), {"chest": 1.0}, sharp=True)
     obj("Belt", lambda bm: wrap_band(bm, bvh, (0, 0.005, 0.95), (0, 0.005, 1.15), 0.24, 0.58, 0.006, 0.022, "belt", segs=20, rings=2),
         {"pelvis": 1.0}, sharp=True)
-    obj("Buckle", lambda bm: projected_plate(bm, bvh, (0, -0.15, 1.025), (0, -1, 0), (0, 0, 1), 0.075, 0.05, colour="trim", squareness=4,
-                                             thickness=0.012, gap=0.025, n=12, rings=(1.0, 0.5)), {"pelvis": 1.0})
+    obj("Buckle", lambda bm: projected_plate(bm, bvh, (0, -0.15, 1.025), (0, -1, 0), (0, 0, 1), 0.08, 0.056, colour="trim", poly=POLY_BUCKLE,
+                                             n=16, rings=(1.0, 0.5), thickness=0.014, gap=0.025), {"pelvis": 1.0})
+    def pouches(bm):
+        axis_o = Vector((0, 0.005, 1.02))
+        for ang in (22, 52):
+            d = Vector((math.sin(math.radians(ang)), -math.cos(math.radians(ang)), 0))
+            hit, hn = surface_at(bvh, axis_o, d)
+            base = hit + d * 0.026
+            oriented_box(bm, base + d * 0.026 + Vector((0, 0, -0.012)), d, (0, 0, 1), (0.068, 0.082, 0.05), "belt", chamfer=0.006)
+            oriented_box(bm, base + d * 0.03 + Vector((0, 0, 0.03)), d, (0, 0, 1), (0.074, 0.024, 0.06), "belt", chamfer=0.004)
+            oriented_box(bm, base + d * 0.058 + Vector((0, 0, 0.012)), d, (0, 0, 1), (0.012, 0.016, 0.006), "trim", chamfer=0.0)
+        return list(bm.verts)
+    obj("Pouches", pouches, {"pelvis": 1.0}, mirror=True)
     # --- arms (left built, right mirrored)
     sh = H("upper_arm.l"); el = H("lower_arm.l"); wr = H("hand.l")
     # pauldron: hugs the shoulder; rays from the shoulder joint over the top and outer side of the deltoid
-    obj("Pauldron", lambda bm: radial_shell(bm, bvh, sh + Vector((-0.02, 0.0, -0.02)), _frame((1, 0, 0), (0.35, 0, 1)), -60, 60, -20, 62,
-                                            0.004, 0.022, "armor", trim="trim", trim_rows=1, segs=10, rows=5, bulge=0.012),
+    obj("Pauldron", lambda bm: radial_shell(bm, bvh, sh + Vector((-0.02, 0.0, -0.02)), _frame((1, 0, 0), (0.35, 0, 1)), -60, 48, -20, 62,
+                                            0.004, 0.022, "armor", trim="trim", trim_rows=1, segs=6, rows=3, bulge=0.006),
         {"upper_arm.l": 1.0}, sharp=True, mirror=True)
     obj("Gauntlet", lambda bm: wrap_band(bm, bvh, el, wr, 0.14, 0.97, 0.003, 0.013, "armor", segs=8, rings=2, flare=0.006),
         {"lower_arm.l": 1.0}, sharp=True, mirror=True)
@@ -653,16 +756,23 @@ def build_armor():
     # --- legs
     hip = H("thigh.l"); kn = H("calf.l"); ank = Vector((0.189, 0.05, 0.13))
     tm = hip.lerp(kn, 0.42)
-    obj("ThighPlate", lambda bm: projected_plate(bm, bvh, tm + Vector((0.07, -0.07, 0)), (0.72, -0.69, 0), (kn - hip).normalized() * -1, 0.12, 0.22,
-                                                 trim="trim", squareness=2.6, thickness=0.018, bulge=0.004, gap=0.002), {"thigh.l": 1.0}, mirror=True)
+    obj("ThighPlate", lambda bm: projected_plate(bm, bvh, tm + Vector((0.07, -0.07, 0)), (0.72, -0.69, 0), (kn - hip).normalized() * -1, 0.13, 0.23,
+                                                 trim="trim", poly=POLY_THIGH, n=28, thickness=0.02, bulge=0.003, gap=0.002), {"thigh.l": 1.0}, mirror=True)
     obj("KneePad", lambda bm: radial_shell(bm, bvh, kn + Vector((0, 0.01, 0.0)), _frame((0, -1, 0), (0, 0, 1)), -48, 48, -38, 42,
                                            0.009, 0.018, "boot", segs=8, rows=5, bulge=0.014),
         {"calf.l": 1.0}, sharp=False, mirror=True)
-    sm = kn.lerp(ank, 0.6)
-    obj("ShinGuard", lambda bm: projected_plate(bm, bvh, sm + Vector((0, -0.08, 0)), (0, -1, 0), (kn - ank).normalized(), 0.11, 0.26,
-                                                squareness=2.8, thickness=0.016, taper=0.15, bulge=0.004), {"calf.l": 1.0}, mirror=True)
-    obj("BootCuff", lambda bm: wrap_band(bm, bvh, ank + Vector((0, 0, -0.1)), kn, 0.29, 0.39, 0.008, 0.02, "boot", segs=14, rings=1),
+    sm = kn.lerp(ank, 0.5)
+    obj("ShinGuard", lambda bm: projected_plate(bm, bvh, sm + Vector((0, -0.08, 0)), (0, -1, 0), (kn - ank).normalized(), 0.115, 0.23,
+                                                poly=POLY_SHIN, n=28, thickness=0.018, bulge=0.003), {"calf.l": 1.0}, mirror=True)
+    # boots: the body's own chunky feet (coloured boot grey), a cuff band hiding the colour edge, and a sole slab
+    obj("BootCuff", lambda bm: wrap_band(bm, bvh, Vector((0.19, 0.05, 0.02)), kn, 0.29, 0.45, 0.006, 0.018, "belt", segs=14, rings=2),
         {"calf.l": 1.0}, sharp=True, mirror=True)
+    def sole_w(res, mirrored):
+        sfx = ".r" if mirrored else ".l"
+        ys = [v.co.y for v in res]
+        return lambda i: {("toe" + sfx): 1.0} if ys[i] < -0.08 else {("foot" + sfx): 1.0}
+    sole_w.needs_vmap = True
+    obj("Sole", lambda bm: sole_prism(bm, 0.0, 0.036, 0.009), sole_w, mirror=True)
     return made
 
 
@@ -694,3 +804,47 @@ def _clear_scale(bvh, center, frame, radii, az0, az1, el0, el1, clearance, p=2.4
         if worst >= clearance: return k
         k *= 1.03
     return k
+
+
+
+def sole_prism(bm, z0, z1, grow, n=20, colour="sole"):
+    """A boot sole: the left foot's outline (convex hull of the body's vertices below the ankle, x > 0.1) grown by `grow`,
+    extruded from z0 to z1 with straight sides. Clean and flat, with no projection."""
+    body = bpy.data.objects["Body"]
+    pts = [(v.co.x, v.co.y) for v in body.data.vertices if v.co.x > 0.1 and v.co.z < 0.1]
+    import numpy as np
+    P = np.array(pts)
+    # convex hull (monotone chain)
+    P = P[np.lexsort((P[:, 1], P[:, 0]))]
+    def cross(o, a, b): return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lower, upper = [], []
+    for p in P:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0: lower.pop()
+        lower.append(tuple(p))
+    for p in P[::-1]:
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0: upper.pop()
+        upper.append(tuple(p))
+    hull = np.array(lower[:-1] + upper[:-1])
+    c = hull.mean(0)
+    # resample by angle around the centre, grown outward
+    out = []
+    for i in range(n):
+        a = 2 * math.pi * i / n; d = np.array([math.cos(a), math.sin(a)])
+        best = 0.0
+        for j in range(len(hull)):
+            p, q = hull[j] - c, hull[(j + 1) % len(hull)] - c
+            M = np.array([[d[0], p[0] - q[0]], [d[1], p[1] - q[1]]])
+            if abs(np.linalg.det(M)) < 1e-9: continue
+            t, u = np.linalg.solve(M, p)
+            if t > 0 and 0 <= u <= 1: best = max(best, t)
+        out.append(c + d * (best + grow))
+    uvl = bm.loops.layers.uv.verify()
+    top = [bm.verts.new((p[0], p[1], z1)) for p in out]; bot = [bm.verts.new((p[0], p[1], z0)) for p in out]
+    F = [bm.faces.new(top), bm.faces.new(list(reversed(bot)))]
+    for i in range(n):
+        j = (i + 1) % n
+        F.append(bm.faces.new([bot[i], bot[j], top[j], top[i]]))
+    bmesh.ops.recalc_face_normals(bm, faces=F)
+    bmesh.ops.triangulate(bm, faces=[F[0], F[1]])
+    for f in bm.faces: _uv_face(f, uvl, colour)
+    return list(bm.verts)
